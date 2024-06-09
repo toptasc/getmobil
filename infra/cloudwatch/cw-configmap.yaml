@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cwagentconfig
+  namespace: kube-system
+  labels:
+    app: cwagent
+data:
+  cwagentconfig.json: |
+    {
+      "logs": {
+        "metrics_collected": {
+          "kubernetes": {
+            "metrics_collection_interval": 60,
+            "cluster_name": "demo",
+            "metrics_groups": [
+              "container_stats",
+              "kubelet_stats",
+              "apiserver",
+              "scheduler",
+              "controller-manager"
+            ]
+          }
+        },
+        "log_stream_name": "eks-${aws:InstanceId}",
+        "force_flush_interval": 5
+      }
+    }

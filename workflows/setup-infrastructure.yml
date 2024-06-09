@@ -1,0 +1,133 @@
+name: setup-infrastructure
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER: demo                      
+         
+jobs:
+  install-terraform-files :
+    if: contains(github.event.head_commit.message, 'run-infrastructure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+ 
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ secrets.TERRAFORM_VERSION }}
+
+    - name: check terraform version
+      run: |
+        terraform --version
+
+    - name: Terraform Init
+      run: |
+        cd ${{ github.workspace }}/infrastructure
+        terraform init
+
+    - name: Terraform Plan
+      run: |
+        cd ${{ github.workspace }}/infrastructure
+        terraform plan -input=false
+
+
+    - name: Terraform Apply
+      run: |
+        cd ${{ github.workspace }}/infrastructure
+        terraform apply -auto-approve -input=false
+
+  install-helm-chart:
+    if: contains(github.event.head_commit.message, 'run-infrastructure'
+    needs: install-terraform-files
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: update kubeconfig and connect aws eks
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER }}
+
+    - name: adding and update helm-charts
+      run: |
+        helm repo add jetstack https://charts.jetstack.io
+        helm repo add nginx https://kubernetes.github.io/ingress-nginx
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+        helm repo update
+
+
+    - name: install helm-charts
+      run: |
+        cd ./infra
+
+        helm upgrade --install cert-manager jetstack/cert-manager --create-namespace --namespace cert-manager --set installCRDs=true
+        helm upgrade --install ingress-nginx nginx/ingress-nginx --create-namespace --namespace nginx -f helm-nginx.yaml
+        helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --create-namespace --namespace monitoring --set grafana.adminPassword="cagri_123*-"
+        sleep 15
+        kubectl apply -f cert-cluster-issuer.yaml
+        kubectl apply -f grafana-ingress.yaml
+
+    - name: install cloudwatch files
+      run: |
+        cd ./infra/cloudwatch
+        kubectl apply -f .
+
+    - name: creating imagePullSecrets
+      run: |
+
+        kubectl create secret docker-registry cagrim --docker-server=271773845484.dkr.ecr.us-east-1.amazonaws.com --docker-username=AWS --docker-password=$(aws ecr get-login-password)
+
+
+  deploy-mysql:
+    if: contains(github.event.head_commit.message, 'run-infrastructure'
+    needs: install-helm-chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: deploy application web
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER }}
+        cd ./app/mysql_deployment
+        kubectl apply -f .
+

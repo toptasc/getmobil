@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phonebook-app-deploy
+  labels:
+    app: phonebook-app-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: phonebook-app-pod
+  template:
+    metadata:
+      name: phonebook-app-pod
+      labels:
+        name: phonebook-app-pod
+    spec:
+      nodeSelector:
+        node: kubenode02
+      tolerations:
+      - key: "node"
+        operator: "Equal"
+        value: "private"
+        effect: "NoSchedule"
+      imagePullSecrets:
+        - name: cagrim
+      containers:
+        - name: phonebook-app
+          image: 271773845484.dkr.ecr.us-east-1.amazonaws.com/web:latest
+          ports:
+          - containerPort: 80
+          env:
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mysql-secret
+                key: mysql-admin-password
+          envFrom:
+          - configMapRef:
+              name: servers-configmap

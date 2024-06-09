@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result-app-deploy
+  labels:
+    name: result-app-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: result-app-pod
+  template:
+    metadata:
+      name: result-app-pod
+      labels:
+        name: result-app-pod
+    spec:
+      nodeSelector:
+        node: kubenode02
+      tolerations:
+      - key: "node"
+        operator: "Equal"
+        value: "private" 
+        effect: "NoSchedule"
+      imagePullSecrets:
+        - name: cagrim
+      containers:
+        - name: result-app
+          image: 271773845484.dkr.ecr.us-east-1.amazonaws.com/result:latest
+          ports:
+          - containerPort: 80
+          env:
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mysql-secret
+                key: mysql-admin-password
+          envFrom:
+          - configMapRef:
+              name: servers-configmap
+
+
