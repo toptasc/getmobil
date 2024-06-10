@@ -1,6 +1,5 @@
 resource "aws_iam_role" "demo" {
   name    = var.cluster_name
-  default = "demo"
   tags = {
     tag-key = "eks-cluster-demo"
   }
